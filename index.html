@@ -221,7 +221,7 @@
   }
   html.light .field label{ text-shadow:none; }
 
-  input[type="text"], input[type="tel"], input[type="number"], select, textarea{
+  input[type="text"], input[type="tel"], input[type="email"], input[type="number"], select, textarea{
     width:100%;
     font:inherit; font-size:14px;
     color:var(--text);
@@ -463,6 +463,12 @@
       <section>
         <h2 class="sec-title">IDENTIFICAÇÃO <small>— quem é você no jogo</small></h2>
         <div class="grid">
+          <div class="field span2">
+            <label for="nome">Nome completo <span class="req-mark">*</span></label>
+            <input type="text" id="nome" name="nome" placeholder="Ex: João da Silva" maxlength="80" autocomplete="name">
+            <span class="hint">Nome e sobrenome (como no documento)</span>
+            <small class="err">Digite seu nome completo (mínimo 5 caracteres, com sobrenome).</small>
+          </div>
           <div class="field">
             <label for="nick">Nick no jogo <span class="req-mark">*</span></label>
             <input type="text" id="nick" name="nick" placeholder="Ex: Steve_123" maxlength="16" autocomplete="off">
@@ -501,6 +507,12 @@
       <section>
         <h2 class="sec-title">CONTATO <small>— pra staff te chamar</small></h2>
         <div class="grid">
+          <div class="field">
+            <label for="email">E-mail <span class="req-mark">*</span></label>
+            <input type="email" id="email" name="email" placeholder="Ex: joao@email.com" maxlength="120" autocomplete="email">
+            <span class="hint">Usamos só pra contato da staff (não enviamos spam)</span>
+            <small class="err">Digite um e-mail válido.</small>
+          </div>
           <div class="field">
             <label for="discord">Discord <span class="req-mark">*</span></label>
             <input type="text" id="discord" name="discord" placeholder="Ex: steve.br" autocomplete="off">
@@ -780,9 +792,14 @@ const LOGO_DATA = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAoAAAAEUCAYAAAC
   const requiredSelectOk = v => v !== "" ? "" : "obrigatório";
 
   const RULES = {
+    nome:       { req: true,  test: v => {
+                    const parts = v.replace(/\s+/g, " ").trim().split(" ");
+                    return (v.length >= 5 && parts.length >= 2 && parts.every(p => p.length >= 2)) ? "" : "err";
+                  }},
     nick:       { req: true,  test: v => /^[A-Za-z0-9_.]{3,16}$/.test(v) ? "" : "err" },
     plataforma: { req: true,  test: requiredSelectOk },
     gamertag:   { req: true,  test: v => v.length >= 3 ? "" : "err" },
+    email:      { req: true,  test: v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(v) ? "" : "err" },
     discord:    { req: true,  test: v => /^\S{2,32}$/.test(v) ? "" : "err" },
     whatsapp:   { req: false, test: v => {
                     if (!v) return "";
@@ -848,38 +865,72 @@ const LOGO_DATA = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAoAAAAEUCAYAAAC
 
     const f = {};
     Object.keys(RULES).forEach(name => { f[name] = getVal(document.forms["form"][name]); });
+    // campos opcionais fora do RULES
+    f.versao = getVal(document.forms["form"].versao);
+    f.convidou = getVal(document.forms["form"].convidou);
 
     sending = true;
     submitBtn.disabled = true;
     submitBtn.textContent = "ENVIANDO...";
+
+    // IP público (pra staff detectar cadastros duplicados do mesmo IP)
+    let ip = "não detectado";
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 4000);
+      const ipResp = await fetch("https://api.ipify.org?format=json", { signal: ctrl.signal });
+      clearTimeout(t);
+      if (ipResp.ok) {
+        const ipData = await ipResp.json();
+        if (ipData && ipData.ip) ip = String(ipData.ip);
+      }
+    } catch (err) {
+      try {
+        const ctrl2 = new AbortController();
+        const t2 = setTimeout(() => ctrl2.abort(), 3000);
+        const ipResp2 = await fetch("https://api64.ipify.org?format=json", { signal: ctrl2.signal });
+        clearTimeout(t2);
+        if (ipResp2.ok) {
+          const ipData2 = await ipResp2.json();
+          if (ipData2 && ipData2.ip) ip = String(ipData2.ip);
+        }
+      } catch (e2) { /* mantém "não detectado" */ }
+    }
+    f.ip = ip;
 
     const color = parseInt(String(CONFIG.EMBED_COLOR).replace("#", ""), 16) || 0x5ebd3e;
     const embed = {
       title: "🎮 Novo cadastro: " + f.nick,
       color: color,
       fields: [
-        { name: "🎮 Nick",        value: f.nick,                 inline: true },
-        { name: "📱 Plataforma",  value: f.plataforma,           inline: true },
-        { name: "🔧 Versão",      value: f.versao || "—",        inline: true },
-        { name: "🕹️ Gamertag",    value: f.gamertag,             inline: true },
-        { name: "💬 Discord",     value: f.discord,              inline: true },
-        { name: "📞 WhatsApp",    value: f.whatsapp || "—",      inline: true },
-        { name: "🎂 Idade",       value: f.idade,                inline: true },
-        { name: "🕒 Horário",     value: f.horario,              inline: true },
-        { name: "⏳ Tempo de jogo", value: f.tempo,              inline: true },
-        { name: "⛏️ Modo favorito", value: f.modo,               inline: true },
-        { name: "🔍 Conheceu por",  value: f.conheceu,           inline: true },
-        { name: "👥 Convidado por", value: f.convidou || "—",    inline: true },
-        { name: "📝 Motivo",        value: f.motivo,             inline: false },
+        { name: "👤 Nome completo", value: f.nome,                 inline: false },
+        { name: "🎮 Nick",          value: f.nick,                 inline: true },
+        { name: "📱 Plataforma",    value: f.plataforma,           inline: true },
+        { name: "🔧 Versão",        value: f.versao || "—",        inline: true },
+        { name: "🕹️ Gamertag",      value: f.gamertag,             inline: true },
+        { name: "📧 E-mail",        value: f.email,                inline: true },
+        { name: "💬 Discord",       value: f.discord,              inline: true },
+        { name: "📞 WhatsApp",      value: f.whatsapp || "—",      inline: true },
+        { name: "🎂 Idade",         value: f.idade,                inline: true },
+        { name: "🕒 Horário",       value: f.horario,              inline: true },
+        { name: "⏳ Tempo de jogo", value: f.tempo,                inline: true },
+        { name: "⛏️ Modo favorito", value: f.modo,                 inline: true },
+        { name: "🔍 Conheceu por",  value: f.conheceu,             inline: true },
+        { name: "👥 Convidado por", value: f.convidou || "—",      inline: true },
+        { name: "🌐 IP",            value: "`" + f.ip + "`",       inline: true },
+        { name: "📝 Motivo",        value: f.motivo,               inline: false },
       ],
-      footer: { text: "Formulário de cadastro • " + CONFIG.SERVER_NAME },
+      footer: { text: "Formulário de cadastro • " + CONFIG.SERVER_NAME + " • confira se o mesmo IP já enviou outro" },
       timestamp: new Date().toISOString(),
     };
     const payload = { username: "Cadastro • " + CONFIG.SERVER_NAME, embeds: [embed] };
 
-    // resumo em texto (fallback + cópia)
+    // resumo em texto (fallback + cópia) — sem IP na cópia do player
     lastText = "🎮 CADASTRO — " + CONFIG.SERVER_NAME + "\n" +
-      embed.fields.map(x => x.name.replace(/^\S+\s/, "") + ": " + x.value).join("\n");
+      embed.fields
+        .filter(x => !x.name.includes("IP"))
+        .map(x => x.name.replace(/^\S+\s/, "") + ": " + x.value.replace(/^`|`$/g, ""))
+        .join("\n");
 
     let ok = false, failMsg = "";
     if (isDemo){
@@ -916,8 +967,8 @@ const LOGO_DATA = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAoAAAAEUCAYAAAC
   /* ── tela de sucesso ── */
   function showSuccess(f, demo){
     const labels = {
-      nick: "Nick", plataforma: "Plataforma", versao: "Versão",
-      gamertag: "Gamertag", discord: "Discord", whatsapp: "WhatsApp",
+      nome: "Nome completo", nick: "Nick", plataforma: "Plataforma", versao: "Versão",
+      gamertag: "Gamertag", email: "E-mail", discord: "Discord", whatsapp: "WhatsApp",
       idade: "Idade", horario: "Horário", tempo: "Tempo de jogo",
       modo: "Modo favorito", conheceu: "Conheceu por", convidou: "Convidado por",
       motivo: "Motivo",
